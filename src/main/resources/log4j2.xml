@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="INFO">
+	
+	<Properties>
+		<property name="HOSTNAMEVAL" value="${sys:HOSTNAME}"/>
+		<property name="LOGPATHVAL" value="${sys:LOGPATH}"/>
+    </Properties>
+    <Appenders>
+        <RollingFile name="Rolling" fileName="${LOGPATHVAL}/logs/textmining_api_converter-${HOSTNAMEVAL}.log" immediateFlush="true" append="true" filePattern="${LOGPATHVAL}/logs/archive/textmining_api_converter-${HOSTNAMEVAL}-%d{yyyy-MM-dd}.log.gz">
+            <PatternLayout pattern=" %d %p %C{1.} [%t] %m%n"/>
+            <Policies>
+            	<TimeBasedTriggeringPolicy interval="1" modulate="true"/>
+			</Policies>
+        </RollingFile>
+    </Appenders>
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="Rolling" />
+            <AppenderRef ref="Console" />
+        </Root>
+    </Loggers>
+</Configuration>
