@@ -1,0 +1,62 @@
+#Purpose:
+#  1. It'll fetch the latest gitleaks.toml to identify exposed secrets/tokens.
+#  2. It will scan the complete repository and complete git commit history
+#  3. It will generate an HTML report as an artifact which expires in 1 week
+
+stages:
+  - security
+
+gitleaks_repo_scan:
+  variables:
+    GIT_DEPTH: 0
+  stage: security
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl git tar jq
+    # fetch and install latest gitleaks binary
+    - |
+      GITLEAKS_VERSION=$(curl -s https://api.github.com/repos/gitleaks/gitleaks/releases/latest | jq -r .tag_name | sed 's/^v//')
+      echo ${GITLEAKS_VERSION}
+      curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz -o gitleaks.tar.gz
+      tar -xzf gitleaks.tar.gz
+      mv gitleaks /usr/local/bin/
+      chmod +x /usr/local/bin/gitleaks
+  script:
+    # prepare folders
+    - rm README.md
+    - mkdir -p .gitlab report_templates public
+
+    # fetch latest gitleaks.toml into .gitlab/ (if fetch fails, keep committed .gitlab/gitleaks.toml)
+    - |
+      if curl -fsSL https://raw.githubusercontent.com/gitleaks/gitleaks/master/config/gitleaks.toml -o .gitlab/gitleaks.toml; then
+        echo "Fetched upstream gitleaks.toml -> .gitlab/gitleaks.toml"
+      else
+        echo "Warning: failed to fetch upstream gitleaks.toml; using committed .gitlab/gitleaks.toml (if present)"
+      fi
+
+    # fetch latest report template
+    - |
+      if curl -fsSL https://raw.githubusercontent.com/gitleaks/gitleaks/master/report_templates/basic.tmpl -o report_templates/basic.tmpl; then
+        echo "Fetched upstream basic.tmpl -> report_templates/basic.tmpl"
+      else
+        echo "Warning: failed to fetch upstream template; using repo template if present"
+      fi
+
+    # -----------------------------
+    # 1) Scan current repository state
+    # -----------------------------
+    - echo "Running Gitleaks scan on working tree..."
+    - gitleaks dir . --config .gitlab/gitleaks.toml --report-path "public/repo-scan.html" --report-format template --report-template report_templates/basic.tmpl
+
+    # -----------------------------
+    # 2) Scan full git history
+    # -----------------------------
+    - echo "Running Gitleaks scan on full git history..."
+    - gitleaks detect --source . --log-opts="--all" --config .gitlab/gitleaks.toml --report-path "public/history-scan.html" --report-format template --report-template report_templates/basic.tmpl
+  tags:
+    - docker:dind
+  artifacts:
+    paths:
+      - public
+    expire_in: 1 week
+    when: always
